@@ -1,0 +1,58 @@
+/*
+Copyright 2021 The Crossplane Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package projects
+
+import (
+	"strings"
+
+	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
+
+	"github.com/crossplane-contrib/provider-gitlab/pkg/common"
+)
+
+// JobTokenScopeClient defines the Gitlab job token scope service operations
+// used to manage a project's CI/CD job token allowlists: the inbound allowlist
+// of projects, and the allowlist of groups.
+type JobTokenScopeClient interface {
+	GetProjectJobTokenInboundAllowList(pid any, opt *gitlab.GetJobTokenInboundAllowListOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Project, *gitlab.Response, error)
+	AddProjectToJobScopeAllowList(pid any, opt *gitlab.JobTokenInboundAllowOptions, options ...gitlab.RequestOptionFunc) (*gitlab.JobTokenInboundAllowItem, *gitlab.Response, error)
+	RemoveProjectFromJobScopeAllowList(pid any, targetProject int64, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error)
+
+	GetJobTokenAllowlistGroups(pid any, opt *gitlab.GetJobTokenAllowlistGroupsOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Group, *gitlab.Response, error)
+	AddGroupToJobTokenAllowlist(pid any, opt *gitlab.AddGroupToJobTokenAllowlistOptions, options ...gitlab.RequestOptionFunc) (*gitlab.JobTokenAllowlistItem, *gitlab.Response, error)
+	RemoveGroupFromJobTokenAllowlist(pid any, targetGroup int64, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error)
+}
+
+// NewJobTokenScopeClient returns a new Gitlab job token scope service.
+func NewJobTokenScopeClient(cfg common.Config) JobTokenScopeClient {
+	git := common.NewClient(cfg)
+	return git.JobTokenScope
+}
+
+// IsErrorJobTokenScopeEntryAlreadyExists returns true if err reports that the
+// allowlist entry GitLab was asked to add is already there.
+//
+// Observe gates Create, so this only fires when something added the entry
+// between the two calls - another controller, or a human. The entry existing is
+// the desired state, so that is a success, not an error. GitLab does not
+// document a stable payload for this case, so the check is deliberately broad.
+func IsErrorJobTokenScopeEntryAlreadyExists(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "already")
+}

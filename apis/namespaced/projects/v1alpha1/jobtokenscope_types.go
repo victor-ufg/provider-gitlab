@@ -1,0 +1,208 @@
+/*
+Copyright 2021 The Crossplane Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+package v1alpha1
+
+import (
+	v2 "github.com/crossplane/crossplane/apis/v2/core/v2"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// JobTokenScopeAllowlistEntryParameters define the desired state of a single
+// entry in a project's CI/CD job token inbound allowlist.
+//
+// Note on GitLab's naming: the API calls the project whose allowlist is being
+// edited the "source", and the project being admitted the "target":
+//
+//	POST /projects/:id/job_token_scope/allowlist  {target_project_id: N}
+//	  -> {"source_project_id": <the :id>, "target_project_id": N}
+//
+// This reads backwards to most people, because the admitted (target) project is
+// the one whose CI jobs originate the call. The field names below keep GitLab's
+// own words so the mapping stays checkable against GitLab's documentation.
+type JobTokenScopeAllowlistEntryParameters struct {
+	// ProjectID is the ID of the project whose inbound allowlist is edited.
+	// This is GitLab's "source" project: the project being accessed.
+	// +crossplane:generate:reference:type=Project
+	// +crossplane:generate:reference:refFieldName=ProjectRef
+	// +crossplane:generate:reference:selectorFieldName=ProjectSelector
+	// +optional
+	// +immutable
+	ProjectID *string `json:"projectId,omitempty"`
+
+	// ProjectRef allows referencing a Project resource by name.
+	// +optional
+	// +immutable
+	ProjectRef *v2.NamespacedReference `json:"projectRef,omitempty"`
+
+	// ProjectSelector allows selecting a Project by labels.
+	// +optional
+	ProjectSelector *v2.NamespacedSelector `json:"projectSelector,omitempty"`
+
+	// TargetProjectID is the ID of the project being admitted to the
+	// allowlist: the project whose CI jobs may use their CI_JOB_TOKEN to
+	// authenticate to ProjectID.
+	// +crossplane:generate:reference:type=Project
+	// +crossplane:generate:reference:refFieldName=TargetProjectRef
+	// +crossplane:generate:reference:selectorFieldName=TargetProjectSelector
+	// +optional
+	// +immutable
+	TargetProjectID *string `json:"targetProjectId,omitempty"`
+
+	// TargetProjectRef allows referencing a Project resource by name.
+	// +optional
+	// +immutable
+	TargetProjectRef *v2.NamespacedReference `json:"targetProjectRef,omitempty"`
+
+	// TargetProjectSelector allows selecting a Project by labels.
+	// +optional
+	TargetProjectSelector *v2.NamespacedSelector `json:"targetProjectSelector,omitempty"`
+}
+
+// JobTokenScopeAllowlistEntryObservation represents the observed state of a
+// job token inbound allowlist entry.
+type JobTokenScopeAllowlistEntryObservation struct {
+	// ID identifies the entry as "<projectId>-<targetProjectId>". An allowlist
+	// entry has no identifier of its own in the GitLab API.
+	ID string `json:"id,omitempty"`
+}
+
+// JobTokenScopeAllowlistEntrySpec defines the desired state of a
+// JobTokenScopeAllowlistEntry.
+type JobTokenScopeAllowlistEntrySpec struct {
+	v2.ManagedResourceSpec `json:",inline"`
+	ForProvider            JobTokenScopeAllowlistEntryParameters `json:"forProvider"`
+}
+
+// JobTokenScopeAllowlistEntryStatus represents the observed state of a
+// JobTokenScopeAllowlistEntry.
+type JobTokenScopeAllowlistEntryStatus struct {
+	v2.ManagedResourceStatus `json:",inline"`
+	AtProvider               JobTokenScopeAllowlistEntryObservation `json:"atProvider,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Namespaced,categories={crossplane,managed,gitlab}
+
+// A JobTokenScopeAllowlistEntry is a managed resource that represents one
+// project in another project's CI/CD job token inbound allowlist.
+type JobTokenScopeAllowlistEntry struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   JobTokenScopeAllowlistEntrySpec   `json:"spec,omitempty"`
+	Status JobTokenScopeAllowlistEntryStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// JobTokenScopeAllowlistEntryList contains a list of JobTokenScopeAllowlistEntry items.
+type JobTokenScopeAllowlistEntryList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []JobTokenScopeAllowlistEntry `json:"items"`
+}
+
+// JobTokenScopeGroupAllowlistEntryParameters define the desired state of a
+// single entry in a project's CI/CD job token groups allowlist.
+//
+// This is the group-source counterpart of
+// JobTokenScopeAllowlistEntryParameters: it admits every project in a group
+// rather than one named project. GitLab's "source"/"target" naming applies the
+// same way, and reads backwards for the same reason - see the note there.
+type JobTokenScopeGroupAllowlistEntryParameters struct {
+	// ProjectID is the ID of the project whose groups allowlist is edited.
+	// This is GitLab's "source" project: the project being accessed.
+	// +crossplane:generate:reference:type=Project
+	// +crossplane:generate:reference:refFieldName=ProjectRef
+	// +crossplane:generate:reference:selectorFieldName=ProjectSelector
+	// +optional
+	// +immutable
+	ProjectID *string `json:"projectId,omitempty"`
+
+	// ProjectRef allows referencing a Project resource by name.
+	// +optional
+	// +immutable
+	ProjectRef *v2.NamespacedReference `json:"projectRef,omitempty"`
+
+	// ProjectSelector allows selecting a Project by labels.
+	// +optional
+	ProjectSelector *v2.NamespacedSelector `json:"projectSelector,omitempty"`
+
+	// TargetGroupID is the ID of the group being admitted to the allowlist:
+	// the CI jobs of any project in this group may use their CI_JOB_TOKEN to
+	// authenticate to ProjectID.
+	// +crossplane:generate:reference:type=github.com/crossplane-contrib/provider-gitlab/apis/namespaced/groups/v1alpha1.Group
+	// +crossplane:generate:reference:refFieldName=TargetGroupRef
+	// +crossplane:generate:reference:selectorFieldName=TargetGroupSelector
+	// +optional
+	// +immutable
+	TargetGroupID *string `json:"targetGroupId,omitempty"`
+
+	// TargetGroupRef allows referencing a Group resource by name.
+	// +optional
+	// +immutable
+	TargetGroupRef *v2.NamespacedReference `json:"targetGroupRef,omitempty"`
+
+	// TargetGroupSelector allows selecting a Group by labels.
+	// +optional
+	TargetGroupSelector *v2.NamespacedSelector `json:"targetGroupSelector,omitempty"`
+}
+
+// JobTokenScopeGroupAllowlistEntryObservation represents the observed state of
+// a job token groups allowlist entry.
+type JobTokenScopeGroupAllowlistEntryObservation struct {
+	// ID identifies the entry as "<projectId>-<targetGroupId>". An allowlist
+	// entry has no identifier of its own in the GitLab API.
+	ID string `json:"id,omitempty"`
+}
+
+// JobTokenScopeGroupAllowlistEntrySpec defines the desired state of a
+// JobTokenScopeGroupAllowlistEntry.
+type JobTokenScopeGroupAllowlistEntrySpec struct {
+	v2.ManagedResourceSpec `json:",inline"`
+	ForProvider            JobTokenScopeGroupAllowlistEntryParameters `json:"forProvider"`
+}
+
+// JobTokenScopeGroupAllowlistEntryStatus represents the observed state of a
+// JobTokenScopeGroupAllowlistEntry.
+type JobTokenScopeGroupAllowlistEntryStatus struct {
+	v2.ManagedResourceStatus `json:",inline"`
+	AtProvider               JobTokenScopeGroupAllowlistEntryObservation `json:"atProvider,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Namespaced,categories={crossplane,managed,gitlab}
+
+// A JobTokenScopeGroupAllowlistEntry is a managed resource that represents one
+// group in a project's CI/CD job token groups allowlist.
+type JobTokenScopeGroupAllowlistEntry struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   JobTokenScopeGroupAllowlistEntrySpec   `json:"spec,omitempty"`
+	Status JobTokenScopeGroupAllowlistEntryStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// JobTokenScopeGroupAllowlistEntryList contains a list of JobTokenScopeGroupAllowlistEntry items.
+type JobTokenScopeGroupAllowlistEntryList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []JobTokenScopeGroupAllowlistEntry `json:"items"`
+}

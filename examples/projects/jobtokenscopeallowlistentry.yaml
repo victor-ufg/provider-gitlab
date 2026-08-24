@@ -1,0 +1,21 @@
+# Allow the CI jobs of "example-target-project" to authenticate to
+# "example-project" with their CI_JOB_TOKEN.
+#
+# GitLab calls the project whose allowlist is edited the "source" (projectRef
+# here) and the project being admitted the "target" (targetProjectRef). The
+# direction reads backwards at first: the target is the project whose jobs
+# originate the call.
+apiVersion: projects.gitlab.m.crossplane.io/v1alpha1
+kind: JobTokenScopeAllowlistEntry
+metadata:
+  name: example-job-token-scope-allowlist-entry
+spec:
+  forProvider:
+    # The project being accessed, whose inbound allowlist gains an entry.
+    projectRef:
+      name: example-project
+    # The project being admitted, whose jobs may authenticate.
+    targetProjectRef:
+      name: example-target-project
+  providerConfigRef:
+    name: gitlab-provider

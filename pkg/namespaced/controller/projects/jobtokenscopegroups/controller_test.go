@@ -1,0 +1,482 @@
+/*
+Copyright 2021 The Crossplane Authors.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package jobtokenscopegroups
+
+import (
+	"context"
+	"net/http"
+	"testing"
+
+	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/resource"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/test"
+	v2 "github.com/crossplane/crossplane/apis/v2/core/v2"
+	"github.com/google/go-cmp/cmp"
+	"github.com/pkg/errors"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
+
+	"github.com/crossplane-contrib/provider-gitlab/apis/namespaced/projects/v1alpha1"
+	"github.com/crossplane-contrib/provider-gitlab/pkg/namespaced/clients/projects"
+	"github.com/crossplane-contrib/provider-gitlab/pkg/namespaced/clients/projects/fake"
+)
+
+var (
+	unexpecedItem    resource.Managed
+	errBoom          = errors.New("boom")
+	projectIDStr     = "1"
+	targetGroupID    = int64(123)
+	targetGroupIDStr = "123"
+	notAnIntStr      = "not-an-int"
+)
+
+type args struct {
+	jobTokenScope projects.JobTokenScopeClient
+	cr            resource.Managed
+}
+
+type entryModifier func(*v1alpha1.JobTokenScopeGroupAllowlistEntry)
+
+func withConditions(c ...v2.Condition) entryModifier {
+	return func(cr *v1alpha1.JobTokenScopeGroupAllowlistEntry) { cr.Status.ConditionedStatus.Conditions = c }
+}
+
+func withProjectID(pID *string) entryModifier {
+	return func(cr *v1alpha1.JobTokenScopeGroupAllowlistEntry) { cr.Spec.ForProvider.ProjectID = pID }
+}
+
+func withTargetGroupID(tID *string) entryModifier {
+	return func(cr *v1alpha1.JobTokenScopeGroupAllowlistEntry) { cr.Spec.ForProvider.TargetGroupID = tID }
+}
+
+func withAtProviderID(id string) entryModifier {
+	return func(cr *v1alpha1.JobTokenScopeGroupAllowlistEntry) { cr.Status.AtProvider.ID = id }
+}
+
+func entry(m ...entryModifier) *v1alpha1.JobTokenScopeGroupAllowlistEntry {
+	cr := &v1alpha1.JobTokenScopeGroupAllowlistEntry{}
+	for _, f := range m {
+		f(cr)
+	}
+	return cr
+}
+
+// bothIDs is the common case: the groups allowlist of project 1 admitting group 123.
+func bothIDs(m ...entryModifier) *v1alpha1.JobTokenScopeGroupAllowlistEntry {
+	return entry(append([]entryModifier{withProjectID(&projectIDStr), withTargetGroupID(&targetGroupIDStr)}, m...)...)
+}
+
+func TestObserve(t *testing.T) {
+	type want struct {
+		cr     resource.Managed
+		result managed.ExternalObservation
+		err    error
+	}
+
+	cases := map[string]struct {
+		args
+		want
+	}{
+		"InValidInput": {
+			args: args{
+				cr: unexpecedItem,
+			},
+			want: want{
+				cr:  unexpecedItem,
+				err: errors.New(errNotJobTokenScopeGroupAllowlistEntry),
+			},
+		},
+		"ProjectIDMissing": {
+			args: args{
+				cr: entry(withTargetGroupID(&targetGroupIDStr)),
+			},
+			want: want{
+				cr:     entry(withTargetGroupID(&targetGroupIDStr)),
+				result: managed.ExternalObservation{ResourceExists: false},
+			},
+		},
+		"TargetGroupIDMissing": {
+			args: args{
+				cr: entry(withProjectID(&projectIDStr)),
+			},
+			want: want{
+				cr:     entry(withProjectID(&projectIDStr)),
+				result: managed.ExternalObservation{ResourceExists: false},
+			},
+		},
+		"TargetGroupIDNotAnInt": {
+			args: args{
+				cr: entry(withProjectID(&projectIDStr), withTargetGroupID(&notAnIntStr)),
+			},
+			want: want{
+				cr: entry(withProjectID(&projectIDStr), withTargetGroupID(&notAnIntStr)),
+				err: errors.Wrap(
+					errors.New(`strconv.ParseInt: parsing "not-an-int": invalid syntax`),
+					errTargetGroupIDNotAnInt,
+				),
+			},
+		},
+		"GetAllowlistError": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockGetJobTokenAllowlistGroups: func(pid any, opt *gitlab.GetJobTokenAllowlistGroupsOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Group, *gitlab.Response, error) {
+						return nil, nil, errBoom
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr:  bothIDs(),
+				err: errors.Wrap(errBoom, errGetAllowlist),
+			},
+		},
+		"SourceProjectGone": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockGetJobTokenAllowlistGroups: func(pid any, opt *gitlab.GetJobTokenAllowlistGroupsOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Group, *gitlab.Response, error) {
+						return nil, &gitlab.Response{Response: &http.Response{StatusCode: http.StatusNotFound}}, errBoom
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr:     bothIDs(),
+				result: managed.ExternalObservation{ResourceExists: false},
+			},
+		},
+		"EntryAbsent": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockGetJobTokenAllowlistGroups: func(pid any, opt *gitlab.GetJobTokenAllowlistGroupsOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Group, *gitlab.Response, error) {
+						return []*gitlab.Group{{ID: 999}}, &gitlab.Response{}, nil
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr:     bothIDs(),
+				result: managed.ExternalObservation{ResourceExists: false},
+			},
+		},
+		"EmptyAllowlist": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockGetJobTokenAllowlistGroups: func(pid any, opt *gitlab.GetJobTokenAllowlistGroupsOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Group, *gitlab.Response, error) {
+						return []*gitlab.Group{}, &gitlab.Response{}, nil
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr:     bothIDs(),
+				result: managed.ExternalObservation{ResourceExists: false},
+			},
+		},
+		"EntryPresent": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockGetJobTokenAllowlistGroups: func(pid any, opt *gitlab.GetJobTokenAllowlistGroupsOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Group, *gitlab.Response, error) {
+						return []*gitlab.Group{{ID: targetGroupID}}, &gitlab.Response{}, nil
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr: bothIDs(withConditions(v2.Available()), withAtProviderID("1-123")),
+				result: managed.ExternalObservation{
+					ResourceExists:   true,
+					ResourceUpToDate: true,
+				},
+			},
+		},
+		// An entry on a later page must still be found. Stopping after the
+		// first page would report it absent and the controller would keep
+		// trying to re-add it forever.
+		"EntryOnSecondPage": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockGetJobTokenAllowlistGroups: func(pid any, opt *gitlab.GetJobTokenAllowlistGroupsOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Group, *gitlab.Response, error) {
+						if opt.Page <= 1 {
+							return []*gitlab.Group{{ID: 998}, {ID: 999}}, &gitlab.Response{NextPage: 2}, nil
+						}
+						return []*gitlab.Group{{ID: targetGroupID}}, &gitlab.Response{}, nil
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr: bothIDs(withConditions(v2.Available()), withAtProviderID("1-123")),
+				result: managed.ExternalObservation{
+					ResourceExists:   true,
+					ResourceUpToDate: true,
+				},
+			},
+		},
+		"AbsentAcrossAllPages": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockGetJobTokenAllowlistGroups: func(pid any, opt *gitlab.GetJobTokenAllowlistGroupsOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Group, *gitlab.Response, error) {
+						if opt.Page <= 1 {
+							return []*gitlab.Group{{ID: 998}}, &gitlab.Response{NextPage: 2}, nil
+						}
+						return []*gitlab.Group{{ID: 999}}, &gitlab.Response{}, nil
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr:     bothIDs(),
+				result: managed.ExternalObservation{ResourceExists: false},
+			},
+		},
+		"ErrorOnSecondPageIsSurfaced": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockGetJobTokenAllowlistGroups: func(pid any, opt *gitlab.GetJobTokenAllowlistGroupsOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Group, *gitlab.Response, error) {
+						if opt.Page <= 1 {
+							return []*gitlab.Group{{ID: 998}}, &gitlab.Response{NextPage: 2}, nil
+						}
+						return nil, nil, errBoom
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr:  bothIDs(),
+				err: errors.Wrap(errBoom, errGetAllowlist),
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := &external{client: tc.args.jobTokenScope}
+			obs, err := e.Observe(context.Background(), tc.args.cr)
+
+			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
+				t.Errorf("r: -want, +got:\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.want.cr, tc.args.cr, test.EquateConditions()); diff != "" {
+				t.Errorf("r: -want, +got:\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.want.result, obs); diff != "" {
+				t.Errorf("r: -want, +got:\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestCreate(t *testing.T) {
+	type want struct {
+		cr     resource.Managed
+		result managed.ExternalCreation
+		err    error
+	}
+
+	cases := map[string]struct {
+		args
+		want
+	}{
+		"InValidInput": {
+			args: args{
+				cr: unexpecedItem,
+			},
+			want: want{
+				cr:  unexpecedItem,
+				err: errors.New(errNotJobTokenScopeGroupAllowlistEntry),
+			},
+		},
+		"IDsMissing": {
+			args: args{
+				cr: entry(withProjectID(&projectIDStr)),
+			},
+			want: want{
+				cr:  entry(withProjectID(&projectIDStr)),
+				err: errors.New(errIDsNotSet),
+			},
+		},
+		"SuccessfulCreation": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockAddGroupToJobTokenAllowlist: func(pid any, opt *gitlab.AddGroupToJobTokenAllowlistOptions, options ...gitlab.RequestOptionFunc) (*gitlab.JobTokenAllowlistItem, *gitlab.Response, error) {
+						if pid != projectIDStr {
+							t.Errorf("unexpected pid: want %v, got %v", projectIDStr, pid)
+						}
+						if opt.TargetGroupID == nil || *opt.TargetGroupID != targetGroupID {
+							t.Errorf("unexpected target group id: %v", opt.TargetGroupID)
+						}
+						return &gitlab.JobTokenAllowlistItem{SourceProjectID: 1, TargetGroupID: targetGroupID}, &gitlab.Response{}, nil
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr:     bothIDs(),
+				result: managed.ExternalCreation{},
+			},
+		},
+		// A human, or another controller, adding the entry between Observe and
+		// Create must not wedge the controller: the entry existing is the
+		// desired state.
+		"AlreadyExistsIsNotAnError": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockAddGroupToJobTokenAllowlist: func(pid any, opt *gitlab.AddGroupToJobTokenAllowlistOptions, options ...gitlab.RequestOptionFunc) (*gitlab.JobTokenAllowlistItem, *gitlab.Response, error) {
+						return nil, &gitlab.Response{Response: &http.Response{StatusCode: http.StatusBadRequest}},
+							errors.New("{message: {target_group_id: [already exists]}}")
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr:     bothIDs(),
+				result: managed.ExternalCreation{},
+			},
+		},
+		"FailedCreation": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockAddGroupToJobTokenAllowlist: func(pid any, opt *gitlab.AddGroupToJobTokenAllowlistOptions, options ...gitlab.RequestOptionFunc) (*gitlab.JobTokenAllowlistItem, *gitlab.Response, error) {
+						return nil, nil, errBoom
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr:  bothIDs(),
+				err: errors.Wrap(errBoom, errAddToAllowlist),
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := &external{client: tc.args.jobTokenScope}
+			creation, err := e.Create(context.Background(), tc.args.cr)
+
+			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
+				t.Errorf("r: -want, +got:\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.want.cr, tc.args.cr, test.EquateConditions()); diff != "" {
+				t.Errorf("r: -want, +got:\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.want.result, creation); diff != "" {
+				t.Errorf("r: -want, +got:\n%s", diff)
+			}
+		})
+	}
+}
+
+// Update has nothing to do: every field of an allowlist entry is immutable.
+func TestUpdate(t *testing.T) {
+	e := &external{}
+	update, err := e.Update(context.Background(), bothIDs())
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if diff := cmp.Diff(managed.ExternalUpdate{}, update); diff != "" {
+		t.Errorf("r: -want, +got:\n%s", diff)
+	}
+}
+
+func TestDelete(t *testing.T) {
+	type want struct {
+		cr  resource.Managed
+		err error
+	}
+
+	cases := map[string]struct {
+		args
+		want
+	}{
+		"InValidInput": {
+			args: args{
+				cr: unexpecedItem,
+			},
+			want: want{
+				cr:  unexpecedItem,
+				err: errors.New(errNotJobTokenScopeGroupAllowlistEntry),
+			},
+		},
+		"IDsMissing": {
+			args: args{
+				cr: entry(withTargetGroupID(&targetGroupIDStr)),
+			},
+			want: want{
+				cr:  entry(withTargetGroupID(&targetGroupIDStr)),
+				err: errors.New(errIDsNotSet),
+			},
+		},
+		"SuccessfulDeletion": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockRemoveGroupFromJobTokenAllowlist: func(pid any, target int64, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error) {
+						if pid != projectIDStr {
+							t.Errorf("unexpected pid: want %v, got %v", projectIDStr, pid)
+						}
+						if target != targetGroupID {
+							t.Errorf("unexpected target group id: want %v, got %v", targetGroupID, target)
+						}
+						return &gitlab.Response{}, nil
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr: bothIDs(),
+			},
+		},
+		// The entry already being gone is the state we wanted.
+		"AlreadyGoneIsNotAnError": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockRemoveGroupFromJobTokenAllowlist: func(pid any, target int64, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error) {
+						return &gitlab.Response{Response: &http.Response{StatusCode: http.StatusNotFound}}, errBoom
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr: bothIDs(),
+			},
+		},
+		"FailedDeletion": {
+			args: args{
+				jobTokenScope: &fake.MockClient{
+					MockRemoveGroupFromJobTokenAllowlist: func(pid any, target int64, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error) {
+						return nil, errBoom
+					},
+				},
+				cr: bothIDs(),
+			},
+			want: want{
+				cr:  bothIDs(),
+				err: errors.Wrap(errBoom, errRemoveFromAllowlist),
+			},
+		},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := &external{client: tc.args.jobTokenScope}
+			_, err := e.Delete(context.Background(), tc.args.cr)
+
+			if diff := cmp.Diff(tc.want.err, err, test.EquateErrors()); diff != "" {
+				t.Errorf("r: -want, +got:\n%s", diff)
+			}
+			if diff := cmp.Diff(tc.want.cr, tc.args.cr, test.EquateConditions()); diff != "" {
+				t.Errorf("r: -want, +got:\n%s", diff)
+			}
+		})
+	}
+}

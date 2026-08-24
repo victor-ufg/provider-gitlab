@@ -1,0 +1,256 @@
+/*
+Copyright 2021 The Crossplane Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package jobtokenscopegroups
+
+import (
+	"context"
+	"strconv"
+
+	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/feature"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/reconciler/managed"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/resource"
+	"github.com/crossplane/crossplane-runtime/v2/pkg/statemetrics"
+	v2 "github.com/crossplane/crossplane/apis/v2/core/v2"
+	"github.com/pkg/errors"
+	gitlab "gitlab.com/gitlab-org/api/client-go/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/crossplane-contrib/provider-gitlab/apis/namespaced/projects/v1alpha1"
+	"github.com/crossplane-contrib/provider-gitlab/pkg/common"
+	"github.com/crossplane-contrib/provider-gitlab/pkg/namespaced/clients"
+	"github.com/crossplane-contrib/provider-gitlab/pkg/namespaced/clients/projects"
+)
+
+const (
+	errNotJobTokenScopeGroupAllowlistEntry = "managed resource is not a JobTokenScopeGroupAllowlistEntry"
+	errIDsNotSet                           = "ProjectID and TargetGroupID must be set"
+	errTargetGroupIDNotAnInt               = "TargetGroupID must be an integer"
+	errGetAllowlist                        = "cannot get job token groups allowlist from GitLab"
+	errAddToAllowlist                      = "cannot add group to job token groups allowlist"
+	errRemoveFromAllowlist                 = "cannot remove group from job token groups allowlist"
+
+	// allowlistPageSize is the page size used when paging through a project's
+	// groups allowlist.
+	allowlistPageSize = 100
+)
+
+// SetupJobTokenScopeGroupAllowlistEntry adds a controller that reconciles
+// JobTokenScopeAllowlistEntries.
+func SetupJobTokenScopeGroupAllowlistEntry(mgr ctrl.Manager, o controller.Options) error {
+	name := managed.ControllerName(v1alpha1.JobTokenScopeGroupAllowlistEntryGroupKind)
+
+	reconcilerOpts := []managed.ReconcilerOption{
+		managed.WithExternalConnector(&connector{kube: mgr.GetClient(), newGitlabClientFn: projects.NewJobTokenScopeClient}),
+		managed.WithInitializers(),
+		managed.WithPollInterval(o.PollInterval),
+		managed.WithLogger(o.Logger.WithValues("controller", name)),
+		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
+	}
+
+	if o.Features.Enabled(feature.EnableBetaManagementPolicies) {
+		reconcilerOpts = append(reconcilerOpts, managed.WithManagementPolicies())
+	}
+
+	r := managed.NewReconciler(mgr,
+		resource.ManagedKind(v1alpha1.JobTokenScopeGroupAllowlistEntryGroupVersionKind),
+		reconcilerOpts...)
+
+	if err := mgr.Add(statemetrics.NewMRStateRecorder(
+		mgr.GetClient(), o.Logger, o.MetricOptions.MRStateMetrics, &v1alpha1.JobTokenScopeGroupAllowlistEntryList{}, o.MetricOptions.PollStateMetricInterval)); err != nil {
+		return err
+	}
+
+	return ctrl.NewControllerManagedBy(mgr).
+		Named(name).
+		For(&v1alpha1.JobTokenScopeGroupAllowlistEntry{}).
+		Complete(r)
+}
+
+// SetupJobTokenScopeGroupAllowlistEntryGated adds a controller with CRD gate support.
+func SetupJobTokenScopeGroupAllowlistEntryGated(mgr ctrl.Manager, o controller.Options) error {
+	o.Gate.Register(func() {
+		if err := SetupJobTokenScopeGroupAllowlistEntry(mgr, o); err != nil {
+			mgr.GetLogger().Error(err, "unable to setup reconciler", "gvk", v1alpha1.JobTokenScopeGroupAllowlistEntryGroupVersionKind.String())
+		}
+	}, v1alpha1.JobTokenScopeGroupAllowlistEntryGroupVersionKind)
+	return nil
+}
+
+type connector struct {
+	kube              client.Client
+	newGitlabClientFn func(cfg common.Config) projects.JobTokenScopeClient
+}
+
+func (c *connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
+	cr, ok := mg.(*v1alpha1.JobTokenScopeGroupAllowlistEntry)
+	if !ok {
+		return nil, errors.New(errNotJobTokenScopeGroupAllowlistEntry)
+	}
+
+	cfg, err := common.GetConfig(ctx, c.kube, cr)
+	if err != nil {
+		return nil, err
+	}
+
+	return &external{client: c.newGitlabClientFn(*cfg)}, nil
+}
+
+type external struct {
+	client projects.JobTokenScopeClient
+}
+
+// Observe pages through the groups allowlist of ProjectID looking for
+// TargetGroupID.
+func (e *external) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
+	cr, ok := mg.(*v1alpha1.JobTokenScopeGroupAllowlistEntry)
+	if !ok {
+		return managed.ExternalObservation{}, errors.New(errNotJobTokenScopeGroupAllowlistEntry)
+	}
+
+	if cr.Spec.ForProvider.ProjectID == nil || cr.Spec.ForProvider.TargetGroupID == nil {
+		return managed.ExternalObservation{ResourceExists: false}, nil
+	}
+
+	targetGroupID, err := strconv.ParseInt(*cr.Spec.ForProvider.TargetGroupID, 10, 64)
+	if err != nil {
+		return managed.ExternalObservation{}, errors.Wrap(err, errTargetGroupIDNotAnInt)
+	}
+
+	found, err := e.entryExists(ctx, *cr.Spec.ForProvider.ProjectID, targetGroupID)
+	if err != nil {
+		return managed.ExternalObservation{}, err
+	}
+
+	if !found {
+		return managed.ExternalObservation{ResourceExists: false}, nil
+	}
+
+	cr.Status.AtProvider.ID = *cr.Spec.ForProvider.ProjectID + "-" + *cr.Spec.ForProvider.TargetGroupID
+	cr.SetConditions(v2.Available())
+
+	// Every field of an allowlist entry is immutable: an entry either is or is
+	// not on the list, so an entry that exists can never be out of date.
+	return managed.ExternalObservation{
+		ResourceExists:   true,
+		ResourceUpToDate: true,
+	}, nil
+}
+
+// entryExists pages through the whole allowlist. Stopping after the first page
+// would make an entry on a later page look absent, and the controller would
+// keep trying to re-add it.
+func (e *external) entryExists(ctx context.Context, projectID string, targetGroupID int64) (bool, error) {
+	opt := &gitlab.GetJobTokenAllowlistGroupsOptions{
+		ListOptions: gitlab.ListOptions{
+			Page:    1,
+			PerPage: allowlistPageSize,
+		},
+	}
+
+	for {
+		allowed, res, err := e.client.GetJobTokenAllowlistGroups(projectID, opt, gitlab.WithContext(ctx))
+		if err != nil {
+			if clients.IsResponseNotFound(res) {
+				return false, nil
+			}
+			return false, errors.Wrap(err, errGetAllowlist)
+		}
+
+		for _, g := range allowed {
+			if g != nil && g.ID == targetGroupID {
+				return true, nil
+			}
+		}
+
+		if res == nil || res.NextPage == 0 {
+			return false, nil
+		}
+		opt.Page = res.NextPage
+	}
+}
+
+func (e *external) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
+	cr, ok := mg.(*v1alpha1.JobTokenScopeGroupAllowlistEntry)
+	if !ok {
+		return managed.ExternalCreation{}, errors.New(errNotJobTokenScopeGroupAllowlistEntry)
+	}
+
+	if cr.Spec.ForProvider.ProjectID == nil || cr.Spec.ForProvider.TargetGroupID == nil {
+		return managed.ExternalCreation{}, errors.New(errIDsNotSet)
+	}
+
+	targetGroupID, err := strconv.ParseInt(*cr.Spec.ForProvider.TargetGroupID, 10, 64)
+	if err != nil {
+		return managed.ExternalCreation{}, errors.Wrap(err, errTargetGroupIDNotAnInt)
+	}
+
+	opt := &gitlab.AddGroupToJobTokenAllowlistOptions{
+		TargetGroupID: gitlab.Ptr(targetGroupID),
+	}
+
+	_, _, err = e.client.AddGroupToJobTokenAllowlist(*cr.Spec.ForProvider.ProjectID, opt, gitlab.WithContext(ctx))
+	if err != nil {
+		// The entry already being on the list is the state we wanted. A human
+		// adding it first should not wedge the controller.
+		if projects.IsErrorJobTokenScopeEntryAlreadyExists(err) {
+			return managed.ExternalCreation{}, nil
+		}
+		return managed.ExternalCreation{}, errors.Wrap(err, errAddToAllowlist)
+	}
+
+	return managed.ExternalCreation{}, nil
+}
+
+// Update is a no-op. An allowlist entry has no mutable field - changing either
+// end of it means a different entry - so Observe never reports one as out of
+// date and this is never called with anything to do.
+func (e *external) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
+	return managed.ExternalUpdate{}, nil
+}
+
+func (e *external) Delete(ctx context.Context, mg resource.Managed) (managed.ExternalDelete, error) {
+	cr, ok := mg.(*v1alpha1.JobTokenScopeGroupAllowlistEntry)
+	if !ok {
+		return managed.ExternalDelete{}, errors.New(errNotJobTokenScopeGroupAllowlistEntry)
+	}
+
+	if cr.Spec.ForProvider.ProjectID == nil || cr.Spec.ForProvider.TargetGroupID == nil {
+		return managed.ExternalDelete{}, errors.New(errIDsNotSet)
+	}
+
+	targetGroupID, err := strconv.ParseInt(*cr.Spec.ForProvider.TargetGroupID, 10, 64)
+	if err != nil {
+		return managed.ExternalDelete{}, errors.Wrap(err, errTargetGroupIDNotAnInt)
+	}
+
+	res, err := e.client.RemoveGroupFromJobTokenAllowlist(*cr.Spec.ForProvider.ProjectID, targetGroupID, gitlab.WithContext(ctx))
+	if err != nil {
+		// The entry already being gone is the state we wanted.
+		if clients.IsResponseNotFound(res) {
+			return managed.ExternalDelete{}, nil
+		}
+		return managed.ExternalDelete{}, errors.Wrap(err, errRemoveFromAllowlist)
+	}
+	return managed.ExternalDelete{}, nil
+}
+
+func (e *external) Disconnect(ctx context.Context) error {
+	return nil
+}

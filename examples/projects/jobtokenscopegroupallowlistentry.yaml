@@ -1,0 +1,19 @@
+# Allow the CI jobs of every project in "example-group" to authenticate to
+# "example-project" with their CI_JOB_TOKEN.
+#
+# This is the group-source counterpart of JobTokenScopeAllowlistEntry: it
+# admits a whole group rather than one named project.
+apiVersion: projects.gitlab.m.crossplane.io/v1alpha1
+kind: JobTokenScopeGroupAllowlistEntry
+metadata:
+  name: example-job-token-scope-group-allowlist-entry
+spec:
+  forProvider:
+    # The project being accessed, whose groups allowlist gains an entry.
+    projectRef:
+      name: example-project
+    # The group being admitted, whose projects' jobs may authenticate.
+    targetGroupRef:
+      name: example-group
+  providerConfigRef:
+    name: gitlab-provider
