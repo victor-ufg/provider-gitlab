@@ -29,6 +29,8 @@ import (
 	"github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/deploytokens"
 	"github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/hooks"
 	integrationmattermost "github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/integrationmattermost"
+	"github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/jobtokenscopegroups"
+	"github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/jobtokenscopes"
 	"github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/members"
 	"github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/pipelineschedules"
 	"github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/projects"
@@ -59,6 +61,8 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		integrationmattermost.SetupIntegrationMattermost,
 		protectedenvironments.SetupProtectedEnvironment,
 		projectsharegroups.SetupProjectShareGroup,
+		jobtokenscopes.SetupJobTokenScopeAllowlistEntry,
+		jobtokenscopegroups.SetupJobTokenScopeGroupAllowlistEntry,
 		serviceaccounts.SetupServiceAccount,
 		serviceaccountaccesstokens.SetupServiceAccountAccessToken,
 	} {
@@ -88,6 +92,8 @@ func SetupGated(mgr ctrl.Manager, o controller.Options) error {
 		integrationmattermost.SetupIntegrationMattermostGated,
 		protectedenvironments.SetupProtectedEnvironmentGated,
 		projectsharegroups.SetupProjectShareGroupGated,
+		jobtokenscopes.SetupJobTokenScopeAllowlistEntryGated,
+		jobtokenscopegroups.SetupJobTokenScopeGroupAllowlistEntryGated,
 		serviceaccounts.SetupServiceAccountGated,
 		serviceaccountaccesstokens.SetupServiceAccountAccessTokenGated,
 	} {

@@ -25,6 +25,7 @@ import (
 )
 
 var _ projects.Client = &MockClient{}
+var _ projects.JobTokenScopeClient = &MockClient{}
 
 // MockClient is a fake implementation of projects.Client.
 type MockClient struct {
@@ -95,6 +96,14 @@ type MockClient struct {
 
 	MockShareProjectWithGroup        func(pid any, opt *gitlab.ShareWithGroupOptions, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error)
 	MockDeleteSharedProjectFromGroup func(pid any, groupID int64, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error)
+
+	MockGetProjectJobTokenInboundAllowList func(pid any, opt *gitlab.GetJobTokenInboundAllowListOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Project, *gitlab.Response, error)
+	MockAddProjectToJobScopeAllowList      func(pid any, opt *gitlab.JobTokenInboundAllowOptions, options ...gitlab.RequestOptionFunc) (*gitlab.JobTokenInboundAllowItem, *gitlab.Response, error)
+	MockRemoveProjectFromJobScopeAllowList func(pid any, targetProject int64, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error)
+
+	MockGetJobTokenAllowlistGroups       func(pid any, opt *gitlab.GetJobTokenAllowlistGroupsOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Group, *gitlab.Response, error)
+	MockAddGroupToJobTokenAllowlist      func(pid any, opt *gitlab.AddGroupToJobTokenAllowlistOptions, options ...gitlab.RequestOptionFunc) (*gitlab.JobTokenAllowlistItem, *gitlab.Response, error)
+	MockRemoveGroupFromJobTokenAllowlist func(pid any, targetGroup int64, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error)
 }
 
 // GetPipelineSchedule calls the underlying MockGetPipelineSchedule method.
@@ -356,4 +365,34 @@ func (c *MockClient) ShareProjectWithGroup(pid any, opt *gitlab.ShareWithGroupOp
 // DeleteSharedProjectFromGroup calls the underlying MockDeleteSharedProjectFromGroup method.
 func (c *MockClient) DeleteSharedProjectFromGroup(pid any, groupID int64, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error) {
 	return c.MockDeleteSharedProjectFromGroup(pid, groupID, options...)
+}
+
+// GetProjectJobTokenInboundAllowList calls the underlying MockGetProjectJobTokenInboundAllowList method.
+func (c *MockClient) GetProjectJobTokenInboundAllowList(pid any, opt *gitlab.GetJobTokenInboundAllowListOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Project, *gitlab.Response, error) {
+	return c.MockGetProjectJobTokenInboundAllowList(pid, opt, options...)
+}
+
+// AddProjectToJobScopeAllowList calls the underlying MockAddProjectToJobScopeAllowList method.
+func (c *MockClient) AddProjectToJobScopeAllowList(pid any, opt *gitlab.JobTokenInboundAllowOptions, options ...gitlab.RequestOptionFunc) (*gitlab.JobTokenInboundAllowItem, *gitlab.Response, error) {
+	return c.MockAddProjectToJobScopeAllowList(pid, opt, options...)
+}
+
+// RemoveProjectFromJobScopeAllowList calls the underlying MockRemoveProjectFromJobScopeAllowList method.
+func (c *MockClient) RemoveProjectFromJobScopeAllowList(pid any, targetProject int64, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error) {
+	return c.MockRemoveProjectFromJobScopeAllowList(pid, targetProject, options...)
+}
+
+// GetJobTokenAllowlistGroups calls the underlying MockGetJobTokenAllowlistGroups method.
+func (c *MockClient) GetJobTokenAllowlistGroups(pid any, opt *gitlab.GetJobTokenAllowlistGroupsOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.Group, *gitlab.Response, error) {
+	return c.MockGetJobTokenAllowlistGroups(pid, opt, options...)
+}
+
+// AddGroupToJobTokenAllowlist calls the underlying MockAddGroupToJobTokenAllowlist method.
+func (c *MockClient) AddGroupToJobTokenAllowlist(pid any, opt *gitlab.AddGroupToJobTokenAllowlistOptions, options ...gitlab.RequestOptionFunc) (*gitlab.JobTokenAllowlistItem, *gitlab.Response, error) {
+	return c.MockAddGroupToJobTokenAllowlist(pid, opt, options...)
+}
+
+// RemoveGroupFromJobTokenAllowlist calls the underlying MockRemoveGroupFromJobTokenAllowlist method.
+func (c *MockClient) RemoveGroupFromJobTokenAllowlist(pid any, targetGroup int64, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error) {
+	return c.MockRemoveGroupFromJobTokenAllowlist(pid, targetGroup, options...)
 }

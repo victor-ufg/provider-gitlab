@@ -370,6 +370,106 @@ func (mg *IntegrationMattermost) SetWriteConnectionSecretToReference(r *v2.Secre
 	mg.Spec.WriteConnectionSecretToReference = r
 }
 
+// GetCondition of this JobTokenScopeAllowlistEntry.
+func (mg *JobTokenScopeAllowlistEntry) GetCondition(ct v2.ConditionType) v2.Condition {
+	return mg.Status.GetCondition(ct)
+}
+
+// GetDeletionPolicy of this JobTokenScopeAllowlistEntry.
+func (mg *JobTokenScopeAllowlistEntry) GetDeletionPolicy() v2.DeletionPolicy {
+	return mg.Spec.DeletionPolicy
+}
+
+// GetManagementPolicies of this JobTokenScopeAllowlistEntry.
+func (mg *JobTokenScopeAllowlistEntry) GetManagementPolicies() v2.ManagementPolicies {
+	return mg.Spec.ManagementPolicies
+}
+
+// GetProviderConfigReference of this JobTokenScopeAllowlistEntry.
+func (mg *JobTokenScopeAllowlistEntry) GetProviderConfigReference() *v2.Reference {
+	return mg.Spec.ProviderConfigReference
+}
+
+// GetWriteConnectionSecretToReference of this JobTokenScopeAllowlistEntry.
+func (mg *JobTokenScopeAllowlistEntry) GetWriteConnectionSecretToReference() *v2.SecretReference {
+	return mg.Spec.WriteConnectionSecretToReference
+}
+
+// SetConditions of this JobTokenScopeAllowlistEntry.
+func (mg *JobTokenScopeAllowlistEntry) SetConditions(c ...v2.Condition) {
+	mg.Status.SetConditions(c...)
+}
+
+// SetDeletionPolicy of this JobTokenScopeAllowlistEntry.
+func (mg *JobTokenScopeAllowlistEntry) SetDeletionPolicy(r v2.DeletionPolicy) {
+	mg.Spec.DeletionPolicy = r
+}
+
+// SetManagementPolicies of this JobTokenScopeAllowlistEntry.
+func (mg *JobTokenScopeAllowlistEntry) SetManagementPolicies(r v2.ManagementPolicies) {
+	mg.Spec.ManagementPolicies = r
+}
+
+// SetProviderConfigReference of this JobTokenScopeAllowlistEntry.
+func (mg *JobTokenScopeAllowlistEntry) SetProviderConfigReference(r *v2.Reference) {
+	mg.Spec.ProviderConfigReference = r
+}
+
+// SetWriteConnectionSecretToReference of this JobTokenScopeAllowlistEntry.
+func (mg *JobTokenScopeAllowlistEntry) SetWriteConnectionSecretToReference(r *v2.SecretReference) {
+	mg.Spec.WriteConnectionSecretToReference = r
+}
+
+// GetCondition of this JobTokenScopeGroupAllowlistEntry.
+func (mg *JobTokenScopeGroupAllowlistEntry) GetCondition(ct v2.ConditionType) v2.Condition {
+	return mg.Status.GetCondition(ct)
+}
+
+// GetDeletionPolicy of this JobTokenScopeGroupAllowlistEntry.
+func (mg *JobTokenScopeGroupAllowlistEntry) GetDeletionPolicy() v2.DeletionPolicy {
+	return mg.Spec.DeletionPolicy
+}
+
+// GetManagementPolicies of this JobTokenScopeGroupAllowlistEntry.
+func (mg *JobTokenScopeGroupAllowlistEntry) GetManagementPolicies() v2.ManagementPolicies {
+	return mg.Spec.ManagementPolicies
+}
+
+// GetProviderConfigReference of this JobTokenScopeGroupAllowlistEntry.
+func (mg *JobTokenScopeGroupAllowlistEntry) GetProviderConfigReference() *v2.Reference {
+	return mg.Spec.ProviderConfigReference
+}
+
+// GetWriteConnectionSecretToReference of this JobTokenScopeGroupAllowlistEntry.
+func (mg *JobTokenScopeGroupAllowlistEntry) GetWriteConnectionSecretToReference() *v2.SecretReference {
+	return mg.Spec.WriteConnectionSecretToReference
+}
+
+// SetConditions of this JobTokenScopeGroupAllowlistEntry.
+func (mg *JobTokenScopeGroupAllowlistEntry) SetConditions(c ...v2.Condition) {
+	mg.Status.SetConditions(c...)
+}
+
+// SetDeletionPolicy of this JobTokenScopeGroupAllowlistEntry.
+func (mg *JobTokenScopeGroupAllowlistEntry) SetDeletionPolicy(r v2.DeletionPolicy) {
+	mg.Spec.DeletionPolicy = r
+}
+
+// SetManagementPolicies of this JobTokenScopeGroupAllowlistEntry.
+func (mg *JobTokenScopeGroupAllowlistEntry) SetManagementPolicies(r v2.ManagementPolicies) {
+	mg.Spec.ManagementPolicies = r
+}
+
+// SetProviderConfigReference of this JobTokenScopeGroupAllowlistEntry.
+func (mg *JobTokenScopeGroupAllowlistEntry) SetProviderConfigReference(r *v2.Reference) {
+	mg.Spec.ProviderConfigReference = r
+}
+
+// SetWriteConnectionSecretToReference of this JobTokenScopeGroupAllowlistEntry.
+func (mg *JobTokenScopeGroupAllowlistEntry) SetWriteConnectionSecretToReference(r *v2.SecretReference) {
+	mg.Spec.WriteConnectionSecretToReference = r
+}
+
 // GetCondition of this Member.
 func (mg *Member) GetCondition(ct v2.ConditionType) v2.Condition {
 	return mg.Status.GetCondition(ct)

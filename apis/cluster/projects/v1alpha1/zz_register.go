@@ -158,6 +158,22 @@ var (
 	ProjectShareGroupGroupVersionKind = SchemeGroupVersion.WithKind(ProjectShareGroupKind)
 )
 
+// JobTokenScopeAllowlistEntry type metadata
+var (
+	JobTokenScopeAllowlistEntryKind             = reflect.TypeOf(JobTokenScopeAllowlistEntry{}).Name()
+	JobTokenScopeAllowlistEntryGroupKind        = schema.GroupKind{Group: Group, Kind: JobTokenScopeAllowlistEntryKind}.String()
+	JobTokenScopeAllowlistEntryKindAPIVersion   = JobTokenScopeAllowlistEntryKind + "." + SchemeGroupVersion.String()
+	JobTokenScopeAllowlistEntryGroupVersionKind = SchemeGroupVersion.WithKind(JobTokenScopeAllowlistEntryKind)
+)
+
+// JobTokenScopeGroupAllowlistEntry type metadata
+var (
+	JobTokenScopeGroupAllowlistEntryKind             = reflect.TypeOf(JobTokenScopeGroupAllowlistEntry{}).Name()
+	JobTokenScopeGroupAllowlistEntryGroupKind        = schema.GroupKind{Group: Group, Kind: JobTokenScopeGroupAllowlistEntryKind}.String()
+	JobTokenScopeGroupAllowlistEntryKindAPIVersion   = JobTokenScopeGroupAllowlistEntryKind + "." + SchemeGroupVersion.String()
+	JobTokenScopeGroupAllowlistEntryGroupVersionKind = SchemeGroupVersion.WithKind(JobTokenScopeGroupAllowlistEntryKind)
+)
+
 // ServiceAccount type metadata
 var (
 	ServiceAccountKind             = reflect.TypeOf(ServiceAccount{}).Name()
@@ -192,6 +208,8 @@ func init() {
 	// Mattermost
 	SchemeBuilder.Register(&IntegrationMattermost{}, &IntegrationMattermostList{})
 	SchemeBuilder.Register(&ProjectShareGroup{}, &ProjectShareGroupList{})
+	SchemeBuilder.Register(&JobTokenScopeAllowlistEntry{}, &JobTokenScopeAllowlistEntryList{})
+	SchemeBuilder.Register(&JobTokenScopeGroupAllowlistEntry{}, &JobTokenScopeGroupAllowlistEntryList{})
 	SchemeBuilder.Register(&ServiceAccount{}, &ServiceAccountList{})
 	SchemeBuilder.Register(&ServiceAccountAccessToken{}, &ServiceAccountAccessTokenList{})
 }
