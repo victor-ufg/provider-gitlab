@@ -28,6 +28,7 @@ import (
 	"github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/deploykeys"
 	"github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/deploytokens"
 	"github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/hooks"
+	integrationharbor "github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/integrationharbor"
 	integrationmattermost "github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/integrationmattermost"
 	"github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/jobtokenscopegroups"
 	"github.com/crossplane-contrib/provider-gitlab/pkg/cluster/controller/projects/jobtokenscopes"
@@ -59,6 +60,7 @@ func Setup(mgr ctrl.Manager, o controller.Options) error {
 		protectedbranches.SetupProtectedBranch,
 		badges.SetupBadge,
 		integrationmattermost.SetupIntegrationMattermost,
+		integrationharbor.SetupIntegrationHarbor,
 		protectedenvironments.SetupProtectedEnvironment,
 		projectsharegroups.SetupProjectShareGroup,
 		jobtokenscopes.SetupJobTokenScopeAllowlistEntry,
@@ -90,6 +92,7 @@ func SetupGated(mgr ctrl.Manager, o controller.Options) error {
 		protectedbranches.SetupProtectedBranchGated,
 		badges.SetupBadgeGated,
 		integrationmattermost.SetupIntegrationMattermostGated,
+		integrationharbor.SetupIntegrationHarborGated,
 		protectedenvironments.SetupProtectedEnvironmentGated,
 		projectsharegroups.SetupProjectShareGroupGated,
 		jobtokenscopes.SetupJobTokenScopeAllowlistEntryGated,

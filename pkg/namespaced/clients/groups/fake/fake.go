@@ -50,6 +50,8 @@ type MockClient struct {
 	MockRevokeGroupAccessToken func(gid interface{}, accessToken int64, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error)
 	MockRotateGroupAccessToken func(gid interface{}, accessToken int64, opt *gitlab.RotateGroupAccessTokenOptions, options ...gitlab.RequestOptionFunc) (*gitlab.GroupAccessToken, *gitlab.Response, error)
 	MockRotateSelf             func(opt *gitlab.RotatePersonalAccessTokenOptions, options ...gitlab.RequestOptionFunc) (*gitlab.PersonalAccessToken, *gitlab.Response, error)
+	MockGetSelf                func(options ...gitlab.RequestOptionFunc) (*gitlab.PersonalAccessToken, *gitlab.Response, error)
+	MockRevokeSelf             func(options ...gitlab.RequestOptionFunc) (*gitlab.Response, error)
 
 	MockListServiceAccountPersonalAccessTokens  func(gid any, serviceAccount int64, opt *gitlab.ListServiceAccountPersonalAccessTokensOptions, options ...gitlab.RequestOptionFunc) ([]*gitlab.PersonalAccessToken, *gitlab.Response, error)
 	MockCreateServiceAccountPersonalAccessToken func(gid any, serviceAccount int64, opt *gitlab.CreateServiceAccountPersonalAccessTokenOptions, options ...gitlab.RequestOptionFunc) (*gitlab.PersonalAccessToken, *gitlab.Response, error)
@@ -79,6 +81,25 @@ type MockClient struct {
 	MockAddGroupHook    func(gid interface{}, opt *gitlab.AddGroupHookOptions, options ...gitlab.RequestOptionFunc) (*gitlab.GroupHook, *gitlab.Response, error)
 	MockEditGroupHook   func(gid interface{}, hook int64, opt *gitlab.EditGroupHookOptions, options ...gitlab.RequestOptionFunc) (*gitlab.GroupHook, *gitlab.Response, error)
 	MockDeleteGroupHook func(gid interface{}, hook int64, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error)
+
+	MockGetGroupHarborSettings func(gid any, options ...gitlab.RequestOptionFunc) (*gitlab.HarborIntegration, *gitlab.Response, error)
+	MockSetUpGroupHarbor       func(gid any, opt *gitlab.SetUpHarborOptions, options ...gitlab.RequestOptionFunc) (*gitlab.HarborIntegration, *gitlab.Response, error)
+	MockDisableGroupHarbor     func(gid any, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error)
+}
+
+// GetGroupHarborSettings calls the underlying MockGetGroupHarborSettings method.
+func (c *MockClient) GetGroupHarborSettings(gid any, options ...gitlab.RequestOptionFunc) (*gitlab.HarborIntegration, *gitlab.Response, error) {
+	return c.MockGetGroupHarborSettings(gid, options...)
+}
+
+// SetUpGroupHarbor calls the underlying MockSetUpGroupHarbor method.
+func (c *MockClient) SetUpGroupHarbor(gid any, opt *gitlab.SetUpHarborOptions, options ...gitlab.RequestOptionFunc) (*gitlab.HarborIntegration, *gitlab.Response, error) {
+	return c.MockSetUpGroupHarbor(gid, opt, options...)
+}
+
+// DisableGroupHarbor calls the underlying MockDisableGroupHarbor method.
+func (c *MockClient) DisableGroupHarbor(gid any, options ...gitlab.RequestOptionFunc) (*gitlab.Response, error) {
+	return c.MockDisableGroupHarbor(gid, options...)
 }
 
 // GetGroup calls the underlying MockGetGroup method.
@@ -174,6 +195,16 @@ func (c *MockClient) RotateGroupAccessToken(gid interface{}, accessToken int64, 
 // RotateSelf calls the underlying MockRotateSelf method.
 func (c *MockClient) RotateSelf(opt *gitlab.RotatePersonalAccessTokenOptions, options ...gitlab.RequestOptionFunc) (*gitlab.PersonalAccessToken, *gitlab.Response, error) {
 	return c.MockRotateSelf(opt, options...)
+}
+
+// GetSelf calls the underlying MockGetSelf method.
+func (c *MockClient) GetSelf(options ...gitlab.RequestOptionFunc) (*gitlab.PersonalAccessToken, *gitlab.Response, error) {
+	return c.MockGetSelf(options...)
+}
+
+// RevokeSelf calls the underlying MockRevokeSelf method.
+func (c *MockClient) RevokeSelf(options ...gitlab.RequestOptionFunc) (*gitlab.Response, error) {
+	return c.MockRevokeSelf(options...)
 }
 
 // ListServiceAccountPersonalAccessTokens calls the underlying MockListServiceAccountPersonalAccessTokens method.
